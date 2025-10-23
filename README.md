@@ -5,7 +5,7 @@ Built with **Laravel 12**, deployed with **Laravel Cloud**, and developed in **P
 
 ---
 
-##  Features
+## Features
 
 For every analyzed string, the API computes and stores:
 
@@ -22,23 +22,24 @@ For every analyzed string, the API computes and stores:
 
 - PHP 8.4
 - Laravel 12
--  SQLite for local testing
+- SQLite (for local testing)
 - Laravel Herd (for local development)
 - Laravel Cloud (for deployment)
 
 ---
 
-##  API Endpoints
+## API Endpoints
 
-### Create / Analyze String
+### ➤ Create / Analyze String
 **POST** `/api/strings`
 
-#### Request Body
+**Request Body**
 ```json
 {
   "value": "madam"
 }
 Response (201 Created)
+
 json
 Copy code
 {
@@ -58,13 +59,14 @@ Copy code
   },
   "created_at": "2025-10-22T12:00:00Z"
 }
-Get Specific String
+➤ Get Specific String
 GET /api/strings/{string_value}
 
 Example:
 GET /api/strings/madam
 
 Response (200 OK)
+
 json
 Copy code
 {
@@ -84,10 +86,11 @@ Copy code
   },
   "created_at": "2025-10-22T12:00:00Z"
 }
-Get All Strings (with filters)
+➤ Get All Strings (with filters)
 GET /api/strings?is_palindrome=true&min_length=3&contains_character=a
 
 Response (200 OK)
+
 json
 Copy code
 {
@@ -99,10 +102,11 @@ Copy code
     "contains_character": "a"
   }
 }
-Natural Language Filtering
+➤ Natural Language Filtering
 GET /api/strings/filter-by-natural-language?query=all+single+word+palindromic+strings
 
 Response (200 OK)
+
 json
 Copy code
 {
@@ -116,41 +120,53 @@ Copy code
     }
   }
 }
- Delete String
+➤ Delete String
 DELETE /api/strings/{string_value}
 
 Response (204 No Content)
 No response body
 
- Local Setup
+🧩 Local Setup
+Requirements
+
 PHP 8.4
+
 Composer
+
 Laravel Herd
+
 Git
 
 Installation
+
 bash
 Copy code
-git clone https://github.com/<your-username>/string-analyzer.git
-cd string-analyzer
+git clone https://github.com/StanRodney/String_Analyzer.git
+cd String_Analyzer
 composer install
 cp .env.example .env
 php artisan key:generate
 php artisan migrate
 Run locally using Laravel Herd or:
 
+bash
+Copy code
 php artisan serve
 Your app will be available at:
-
-http://string_analyzer.test/api
+👉 http://string_analyzer.test/api
 
 ☁️ Deployment
-Deployed using Laravel Cloud.
-Base URL:
-https://<your-app-name>.loud.run/api
+Deployed using Laravel Cloud
 
-🧑‍💻 Author
-Name:Anita Rodney-Ajayi
+Base URL:
+👉 https://string-analyzer-main-gmzpne.laravel.cloud/api
+
+You can test it live:
+👉 https://string-analyzer-main-gmzpne.laravel.cloud/api/strings/hello
+
+👩‍💻 Author
+Name: Anita Rodney-Ajayi
 Email: anotarodney30@gmail.com
-GitHub: github.com/yourusername
+GitHub: github.com/StanRodney
+
 
