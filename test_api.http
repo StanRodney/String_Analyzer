@@ -1,4 +1,4 @@
-### Test the String Analyzer API
+### 1️⃣ Create / Analyze a String
 POST http://string_analyzer.test/api/strings
 Content-Type: application/json
 
@@ -6,10 +6,11 @@ Content-Type: application/json
     "value": "madam"
 }
 
-### Get a specific analyzed string
+### 2️⃣ Get a specific analyzed string
 GET http://string_analyzer.test/api/strings/madam
+Accept: application/json
 
-### Create / Analyze a String
+### 3️⃣ Create a duplicate (should return 409 Conflict)
 POST http://string_analyzer.test/api/strings
 Content-Type: application/json
 
@@ -17,52 +18,45 @@ Content-Type: application/json
     "value": "madam"
 }
 
-### Get All Strings with Filtering
-GET http://string_analyzer.test/api/strings/madam
+### 4️⃣ Try creating with missing value (should return 422 Unprocessable Entity)
+POST http://string_analyzer.test/api/strings
+Content-Type: application/json
 
-### Get all analyzed strings
+{
+}
+
+### 5️⃣ Try invalid type (should return 422)
+POST http://string_analyzer.test/api/strings
+Content-Type: application/json
+
+{
+    "value": 12345
+}
+
+### 6️⃣ Get all analyzed strings
 GET http://string_analyzer.test/api/strings
 Accept: application/json
 
-
-### Filter: only palindromes
+### 7️⃣ Filter: only palindromes
 GET http://string_analyzer.test/api/strings?is_palindrome=true
 Accept: application/json
 
-### Filter: by minimum length
+### 8️⃣ Filter: by minimum length
 GET http://string_analyzer.test/api/strings?min_length=4
 Accept: application/json
 
-### Analyze "hello"
-GET http://string_analyzer.test/api/strings/hello
-Accept: application/json
-
-### Analyze "racecar"
-GET http://string_analyzer.test/api/strings/racecar
-Accept: application/json
-
-### Filter: combine filters
-GET http://string_analyzer.test/api/strings?is_palindrome=true&min_length=4
-Accept: application/json
-
-### Test with multiple filters
+### 9️⃣ Combine multiple filters
 GET http://string_analyzer.test/api/strings?is_palindrome=true&min_length=3&max_length=10&word_count=1&contains_character=a
-
-### Test with multiple filters
-GET http://string_analyzer.test/api/strings?is_palindrome=true
-
-###  Delete an existing String
-DELETE http://string_analyzer.test/api/strings/madam
-
-###  Delete non-existent String
-DELETE http://string_analyzer.test/api/strings/unknown
-
-### Natural language filtering
-GET http://string_analyzer.test/api/strings/filter-by-natural-language?query=all single word palindromic strings
-
-### Filter palindromic single-word strings
-GET http://string_analyzer.test/api/strings/filter-by-natural-language?query=all+single+word+palindromic+strings
 Accept: application/json
 
+### 🔟 Delete an existing string
+DELETE http://string_analyzer.test/api/strings/madam
+Accept: application/json
 
+### 11️⃣ Delete non-existent string (should return 404)
+DELETE http://string_analyzer.test/api/strings/unknown
+Accept: application/json
 
+### 12️⃣ Natural language filtering
+GET http://string_analyzer.test/api/strings/filter-by-natural-language?query=all single word palindromic strings
+Accept: application/json
