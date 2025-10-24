@@ -7,70 +7,120 @@ use Illuminate\Http\Request;
 
 class AnalyzedStringController extends Controller
 {
+    /**
+     * GET /api/strings
+     * Return filtered listing with filters_applied.
+     */
     public function index(Request $request)
     {
         $query = AnalyzedString::query();
         $filtersApplied = [];
 
+        // is_palindrome (boolean)
         if ($request->has('is_palindrome')) {
-            $isPalindrome = filter_var($request->get('is_palindrome'), FILTER_VALIDATE_BOOLEAN);
-            $query->where('is_palindrome', $isPalindrome);
-            $filtersApplied['is_palindrome'] = $isPalindrome;
+            $val = $request->query('is_palindrome');
+            $bool = filter_var($val, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($bool === null) {
+                return response()->json(['error' => 'Invalid value for is_palindrome'], 400);
+            }
+            $query->where('is_palindrome', $bool);
+            $filtersApplied['is_palindrome'] = $bool;
         }
 
+        // min_length (integer)
         if ($request->has('min_length')) {
-            $minLength = (int) $request->get('min_length');
-            $query->where('length', '>=', $minLength);
-            $filtersApplied['min_length'] = $minLength;
+            if (!is_numeric($request->query('min_length'))) {
+                return response()->json(['error' => 'min_length must be an integer'], 400);
+            }
+            $min = (int) $request->query('min_length');
+            $query->where('length', '>=', $min);
+            $filtersApplied['min_length'] = $min;
         }
 
+        // max_length (integer)
         if ($request->has('max_length')) {
-            $maxLength = (int) $request->get('max_length');
-            $query->where('length', '<=', $maxLength);
-            $filtersApplied['max_length'] = $maxLength;
+            if (!is_numeric($request->query('max_length'))) {
+                return response()->json(['error' => 'max_length must be an integer'], 400);
+            }
+            $max = (int) $request->query('max_length');
+            $query->where('length', '<=', $max);
+            $filtersApplied['max_length'] = $max;
         }
 
+        // word_count (integer)
         if ($request->has('word_count')) {
-            $wordCount = (int) $request->get('word_count');
-            $query->where('word_count', $wordCount);
-            $filtersApplied['word_count'] = $wordCount;
+            if (!is_numeric($request->query('word_count'))) {
+                return response()->json(['error' => 'word_count must be an integer'], 400);
+            }
+            $wc = (int) $request->query('word_count');
+            $query->where('word_count', $wc);
+            $filtersApplied['word_count'] = $wc;
         }
 
+        // contains_character (single letter)
         if ($request->has('contains_character')) {
-            $char = strtolower($request->get('contains_character'));
-            $query->whereRaw("LOWER(JSON_EXTRACT(character_frequency_map, '$.\"$char\"')) IS NOT NULL");
+            $char = strtolower($request->query('contains_character'));
+            if (mb_strlen($char) !== 1) {
+                return response()->json(['error' => 'contains_character must be a single character'], 400);
+            }
+
+            // Use JSON_EXTRACT presence check (works if DB supports JSON functions)
+            $query->whereRaw("JSON_EXTRACT(character_frequency_map, '$.\"$char\"') IS NOT NULL");
             $filtersApplied['contains_character'] = $char;
         }
 
         $results = $query->get();
 
+        // map to expected output format
+        $data = $results->map(function ($item) {
+            return [
+                'id' => $item->sha256_hash,
+                'value' => $item->value,
+                'properties' => [
+                    'length' => $item->length,
+                    'is_palindrome' => (bool) $item->is_palindrome,
+                    'unique_characters' => $item->unique_characters,
+                    'word_count' => $item->word_count,
+                    'sha256_hash' => $item->sha256_hash,
+                    'character_frequency_map' => $item->character_frequency_map,
+                ],
+                'created_at' => $item->created_at->toIso8601String(),
+            ];
+        });
+
         return response()->json([
-            'data' => $results,
-            'count' => $results->count(),
+            'data' => $data,
+            'count' => $data->count(),
             'filters_applied' => $filtersApplied,
         ], 200);
     }
 
+    /**
+     * DELETE /api/strings/{string_value}
+     */
     public function destroy($stringValue)
     {
-        $string = AnalyzedString::where('value', $stringValue)->first();
+        $record = AnalyzedString::where('value', $stringValue)->first();
 
-        if (!$string) {
+        if (!$record) {
             return response()->json(['error' => 'String not found'], 404);
         }
 
-        $string->delete();
+        $record->delete();
 
-        return response()->noContent(); // 204 No Content
+        // 204 No Content
+        return response()->noContent();
     }
 
-
+    /**
+     * GET /api/strings/filter-by-natural-language?query=...
+     */
     public function filterByNaturalLanguage(Request $request)
     {
-        $queryText = strtolower($request->get('query'));
+        $queryText = strtolower((string) $request->query('query', ''));
 
-        if (!$queryText) {
-            return response()->json(['error' => 'Missing query parameter'], 422);
+        if (trim($queryText) === '') {
+            return response()->json(['error' => 'Missing query parameter'], 400);
         }
 
         $filters = [];
@@ -79,53 +129,76 @@ class AnalyzedStringController extends Controller
             $filters['is_palindrome'] = true;
         }
 
-        if (preg_match('/longer than (\d+)/', $queryText, $matches)) {
-            $filters['min_length'] = (int) $matches[1] + 1;
-        }
-
-        if (preg_match('/shorter than (\d+)/', $queryText, $matches)) {
-            $filters['max_length'] = (int) $matches[1] - 1;
-        }
-
-        if (preg_match('/containing the letter ([a-z])/', $queryText, $matches)) {
-            $filters['contains_character'] = strtolower($matches[1]);
-        }
-
         if (str_contains($queryText, 'single word')) {
             $filters['word_count'] = 1;
         }
 
+        if (preg_match('/longer than (\d+)/', $queryText, $m)) {
+            $filters['min_length'] = (int)$m[1] + 1;
+        }
+
+        if (preg_match('/shorter than (\d+)/', $queryText, $m)) {
+            $filters['max_length'] = (int)$m[1] - 1;
+        }
+
+        if (preg_match('/containing the letter ([a-z])/', $queryText, $m)) {
+            $filters['contains_character'] = strtolower($m[1]);
+        }
+
+        // special heuristic: "first vowel" -> 'a'
+        if (str_contains($queryText, 'first vowel')) {
+            $filters['contains_character'] = 'a';
+        }
+
         if (empty($filters)) {
-            return response()->json(['error' => 'Unable to parse natural language query'], 422);
+            return response()->json(['error' => 'Unable to parse natural language query'], 400);
         }
 
-        $query = AnalyzedString::query();
-
-        foreach ($filters as $key => $value) {
-            switch ($key) {
-                case 'is_palindrome':
-                    $query->where('is_palindrome', $value);
-                    break;
-                case 'min_length':
-                    $query->where('length', '>=', $value);
-                    break;
-                case 'max_length':
-                    $query->where('length', '<=', $value);
-                    break;
-                case 'word_count':
-                    $query->where('word_count', $value);
-                    break;
-                case 'contains_character':
-                    $query->whereRaw("LOWER(JSON_EXTRACT(character_frequency_map, '$.\"$value\"')) IS NOT NULL");
-                    break;
-            }
+        // detect conflicting filters (min > max)
+        if (isset($filters['min_length'], $filters['max_length']) && $filters['min_length'] > $filters['max_length']) {
+            return response()->json(['error' => 'Query parsed but resulted in conflicting filters'], 422);
         }
 
-        $results = $query->get();
+        $q = AnalyzedString::query();
+
+        if (isset($filters['is_palindrome'])) {
+            $q->where('is_palindrome', $filters['is_palindrome']);
+        }
+        if (isset($filters['word_count'])) {
+            $q->where('word_count', $filters['word_count']);
+        }
+        if (isset($filters['min_length'])) {
+            $q->where('length', '>=', $filters['min_length']);
+        }
+        if (isset($filters['max_length'])) {
+            $q->where('length', '<=', $filters['max_length']);
+        }
+        if (isset($filters['contains_character'])) {
+            $char = $filters['contains_character'];
+            $q->whereRaw("JSON_EXTRACT(character_frequency_map, '$.\"$char\"') IS NOT NULL");
+        }
+
+        $results = $q->get();
+
+        $data = $results->map(function ($item) {
+            return [
+                'id' => $item->sha256_hash,
+                'value' => $item->value,
+                'properties' => [
+                    'length' => $item->length,
+                    'is_palindrome' => (bool) $item->is_palindrome,
+                    'unique_characters' => $item->unique_characters,
+                    'word_count' => $item->word_count,
+                    'sha256_hash' => $item->sha256_hash,
+                    'character_frequency_map' => $item->character_frequency_map,
+                ],
+                'created_at' => $item->created_at->toIso8601String(),
+            ];
+        });
 
         return response()->json([
-            'data' => $results,
-            'count' => $results->count(),
+            'data' => $data,
+            'count' => $data->count(),
             'interpreted_query' => [
                 'original' => $queryText,
                 'parsed_filters' => $filters,

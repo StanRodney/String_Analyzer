@@ -4,139 +4,101 @@ namespace App\Http\Controllers;
 
 use App\Models\AnalyzedString;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class StringController extends Controller
 {
     /**
+     * POST /api/strings
      * Analyze and store a new string.
      */
     public function analyzeString(Request $request)
     {
-        $request->validate([
-            'value' => 'required|string',
-        ]);
-
-        $value = trim($request->input('value'));
-
-        // Check for duplicate
-        if (AnalyzedString::where('value', $value)->exists()) {
-            return response()->json([
-                'error' => 'String already analyzed'
-            ], 409); // Conflict
+        // 1) Missing field => 400 Bad Request
+        if (!$request->has('value')) {
+            return response()->json(['error' => 'Missing "value" field'], 400);
         }
 
-        $isPalindrome = $value === strrev($value);
-        $uniqueCharacters = count(array_unique(str_split(strtolower($value))));
-        $wordCount = str_word_count($value);
+        $value = $request->input('value');
+
+        // 2) Invalid type => 422 Unprocessable Entity
+        if (!is_string($value)) {
+            return response()->json(['error' => '"value" must be a string'], 422);
+        }
+
+        $value = trim($value);
         $sha256Hash = hash('sha256', $value);
 
-        $charFreq = [];
-        foreach (count_chars(strtolower($value), 1) as $char => $count) {
-            $charFreq[chr($char)] = $count;
+        // 3) Duplicate check by sha256 => 409 Conflict
+        if (AnalyzedString::where('sha256_hash', $sha256Hash)->exists()) {
+            return response()->json(['error' => 'String already exists'], 409);
         }
 
-        $analyzed = AnalyzedString::create([
+        // Compute properties (case-insensitive palindrome check)
+        $lower = mb_strtolower($value);
+        $length = mb_strlen($value);
+        $isPalindrome = $lower === Str::reverse($lower);
+        $uniqueCharacters = count(array_unique(preg_split('//u', $lower, -1, PREG_SPLIT_NO_EMPTY)));
+        $wordCount = str_word_count($value);
+
+        // Character frequency map (case-insensitive keys)
+        $chars = preg_split('//u', $lower, -1, PREG_SPLIT_NO_EMPTY);
+        $frequency = [];
+        foreach ($chars as $c) {
+            $frequency[$c] = ($frequency[$c] ?? 0) + 1;
+        }
+
+        // Save record (sha256_hash is stored on model)
+        $record = AnalyzedString::create([
             'value' => $value,
-            'length' => strlen($value),
-            'is_palindrome' => $isPalindrome,
+            'sha256_hash' => $sha256Hash,
+            'length' => $length,
+            'is_palindrome' => (bool) $isPalindrome,
             'unique_characters' => $uniqueCharacters,
             'word_count' => $wordCount,
-            'sha256_hash' => $sha256Hash,
-            'character_frequency_map' => $charFreq,
+            'character_frequency_map' => $frequency,
         ]);
 
-        return response()->json($analyzed, 201); // Created
+        // Response must use sha256_hash as id
+        return response()->json([
+            'id' => $record->sha256_hash,
+            'value' => $record->value,
+            'properties' => [
+                'length' => $record->length,
+                'is_palindrome' => (bool) $record->is_palindrome,
+                'unique_characters' => $record->unique_characters,
+                'word_count' => $record->word_count,
+                'sha256_hash' => $record->sha256_hash,
+                'character_frequency_map' => $record->character_frequency_map,
+            ],
+            'created_at' => $record->created_at->toIso8601String(),
+        ], 201);
     }
 
     /**
-     * Get a specific analyzed string.
+     * GET /api/strings/{value}
+     * Return analyzed string or 404 if not found.
      */
     public function getString($value)
     {
-        $string = AnalyzedString::where('value', $value)->first();
+        $record = AnalyzedString::where('value', $value)->first();
 
-        if (!$string) {
-            return response()->json([
-                'error' => 'String not found'
-            ], 404);
+        if (!$record) {
+            return response()->json(['error' => 'String not found'], 404);
         }
-
-        return response()->json($string, 200);
-    }
-}
-
-
-
-public function getString($value)
-    {
-        $analyzedString = AnalyzedString::where('value', $value)->first();
-
-        if (!$analyzedString) {
-            return response()->json([
-                'error' => 'String not found in the system.'
-            ], 404);
-        }
-
-        $characterFrequencyMap = json_decode($analyzedString->character_frequency_map, true);
 
         return response()->json([
-            'id' => $analyzedString->id,
-            'value' => $analyzedString->value,
+            'id' => $record->sha256_hash,
+            'value' => $record->value,
             'properties' => [
-                'length' => $analyzedString->length,
-                'is_palindrome' => $analyzedString->is_palindrome,
-                'unique_characters' => $analyzedString->unique_characters,
-                'word_count' => $analyzedString->word_count,
-                'sha256_hash' => $analyzedString->sha256_hash,
-                'character_frequency_map' => $characterFrequencyMap,
+                'length' => $record->length,
+                'is_palindrome' => (bool) $record->is_palindrome,
+                'unique_characters' => $record->unique_characters,
+                'word_count' => $record->word_count,
+                'sha256_hash' => $record->sha256_hash,
+                'character_frequency_map' => $record->character_frequency_map,
             ],
-            'created_at' => $analyzedString->created_at->toISOString(),
+            'created_at' => $record->created_at->toIso8601String(),
         ], 200);
     }
-
-    public function analyze($string)
-    {
-        $lowercaseValue = strtolower($string);
-
-        $length = strlen($string);
-        $is_palindrome = $lowercaseValue === strrev($lowercaseValue);
-        $unique_characters = count(array_unique(str_split($lowercaseValue)));
-        $word_count = str_word_count($string);
-        $sha256_hash = hash('sha256', $string);
-
-        $character_frequency_map = [];
-        foreach (str_split($lowercaseValue) as $char) {
-            $character_frequency_map[$char] = ($character_frequency_map[$char] ?? 0) + 1;
-        }
-
-
-        $analyzedString = AnalyzedString::updateOrCreate(
-            ['sha256_hash' => $sha256_hash],
-            [
-                'value' => $string,
-                'length' => $length,
-                'is_palindrome' => $is_palindrome,
-                'unique_characters' => $unique_characters,
-                'word_count' => $word_count,
-                'character_frequency_map' => json_encode($character_frequency_map),
-            ]
-        );
-
-        $response = [
-            'id' => $sha256_hash,
-            'value' => $string,
-            'properties' => [
-                'length' => $length,
-                'is_palindrome' => $is_palindrome,
-                'unique_characters' => $unique_characters,
-                'word_count' => $word_count,
-                'sha256_hash' => $sha256_hash,
-                'character_frequency_map' => $character_frequency_map
-            ],
-            'created_at' => $analyzedString->created_at->toISOString(),
-        ];
-
-        return response()->json($response, 200);
-    }
-
 }

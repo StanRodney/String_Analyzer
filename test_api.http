@@ -60,3 +60,26 @@ Accept: application/json
 ### 12️⃣ Natural language filtering
 GET http://string_analyzer.test/api/strings/filter-by-natural-language?query=all single word palindromic strings
 Accept: application/json
+###
+DELETE http://string_analyzer.test/api/strings/madam
+Accept: application/json
+###
+DELETE http://string_analyzer.test/api/strings/unknown
+Accept: application/json
+
+###
+POST http://string_analyzer.test/api/strings
+Content-Type: application/json
+
+{
+  "value": "madam"
+}
+
+###
+POST http://string_analyzer.test/api/strings
+Content-Type: application/json
+
+{
+"value": "madam"
+}
+
